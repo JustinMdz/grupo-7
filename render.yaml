@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: chat-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: MAX_GROUP_MESSAGES
+        value: "100"
+      - key: MAX_DM_MESSAGES
+        value: "50"
