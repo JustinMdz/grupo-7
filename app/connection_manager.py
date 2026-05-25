@@ -1,15 +1,4 @@
-"""
-ConnectionManager — Núcleo del servidor de chat.
 
-Gestiona:
-- Conexiones WebSocket activas (en memoria)
-- Usuarios registrados y su estado online/offline
-- Historial de mensajes grupales y DMs (en memoria)
-- Broadcast y envío directo de mensajes
-
-Este manager vive como singleton global en app/__init__.py
-y se inyecta en app.state.manager para que los routers lo accedan.
-"""
 
 import base64
 import uuid
@@ -56,17 +45,21 @@ class ConnectionManager:
     # ── Registro ─────────────────────────────────────────────────────────────
 
     def register_user(self, nickname: str) -> tuple[ChatUser, str]:
-        """
-        Crea un nuevo usuario con nickname.
-        Devuelve (ChatUser, token).
-        No requiere contraseña ni email.
-        """
+    
+        normalized = nickname.strip()
+
+        # Retornar usuario existente si el nickname ya está registrado
+        for existing in self.registered_users.values():
+            if existing.nickname == normalized:
+                return existing, self.create_token(existing.id)
+
+        # Crear nuevo usuario
         user_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
 
         user = ChatUser(
             id=user_id,
-            nickname=nickname.strip(),
+            nickname=normalized,
             joined_at=now,
             is_online=False,
         )
@@ -78,10 +71,7 @@ class ConnectionManager:
     # ── Ciclo de vida WebSocket ───────────────────────────────────────────────
 
     async def connect(self, websocket: WebSocket, user_id: str) -> bool:
-        """
-        Acepta la conexión WebSocket y marca al usuario como online.
-        Devuelve False si el user_id no está registrado.
-        """
+        
         user = self.registered_users.get(user_id)
         if not user:
             return False
@@ -93,7 +83,7 @@ class ConnectionManager:
         return True
 
     async def disconnect(self, user_id: str) -> None:
-        """Elimina la conexión y marca al usuario como offline."""
+       
         self.active_connections.pop(user_id, None)
         user = self.active_users.pop(user_id, None)
         if user:
@@ -102,7 +92,7 @@ class ConnectionManager:
     # ── Envío de mensajes ─────────────────────────────────────────────────────
 
     async def broadcast(self, message: dict, exclude_id: Optional[str] = None) -> None:
-        """Envía un mensaje a todos los usuarios conectados (excepto exclude_id)."""
+       
         for uid, ws in list(self.active_connections.items()):
             if uid != exclude_id:
                 try:
@@ -113,7 +103,7 @@ class ConnectionManager:
                     pass
 
     async def send_to(self, user_id: str, message: dict) -> None:
-        """Envía un mensaje a un usuario específico."""
+       
         ws = self.active_connections.get(user_id)
         if ws:
             try:

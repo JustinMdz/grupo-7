@@ -43,10 +43,7 @@ async def _handle_message(
     nickname: str,
     data: dict,
 ) -> None:
-    """
-    Procesa un mensaje recibido por WebSocket desde un cliente.
-    Despacha según data["type"].
-    """
+    
     msg_type = data.get("type")
 
     # ── Mensaje al chat grupal ────────────────────────────────────────────────
@@ -126,16 +123,7 @@ async def _handle_message(
 
 @router.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str) -> None:
-    """
-    Punto de entrada WebSocket.
-
-    1. Decodifica el token → user_id
-    2. Acepta la conexión
-    3. Notifica a todos que el usuario entró
-    4. Envía estado inicial (usuarios online + historial) al nuevo usuario
-    5. Loop de recepción de mensajes
-    6. Al desconectar, notifica a todos
-    """
+ 
     manager: ConnectionManager = websocket.app.state.manager
 
     # Validar token

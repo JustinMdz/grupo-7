@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 
 class ChatUser(BaseModel):
-    """Representa a un usuario del chat."""
+    
     id: str
     nickname: str
     joined_at: str       # ISO 8601
