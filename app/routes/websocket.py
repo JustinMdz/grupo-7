@@ -83,7 +83,11 @@ async def _handle_message(
             await manager.send_to(user_id, {"type": "error", "message": "El mensaje es demasiado largo (máx 1000 caracteres)."})
             return
 
-        ttl = _parse_ttl(data.get("ttl"))
+        raw_ttl = data.get("ttl")
+        ttl = _parse_ttl(raw_ttl)
+        if raw_ttl is not None and ttl is None:
+            await manager.send_to(user_id, {"type": "error", "message": "ttl inválido: debe ser un entero entre 1 y 86400."})
+            return
         allow_read_receipt = data.get("allow_read_receipt", True)
         if not isinstance(allow_read_receipt, bool):
             allow_read_receipt = True
@@ -133,7 +137,11 @@ async def _handle_message(
             await manager.send_to(user_id, {"type": "error", "message": "El mensaje es demasiado largo (máx 1000 caracteres)."})
             return
 
-        ttl = _parse_ttl(data.get("ttl"))
+        raw_ttl = data.get("ttl")
+        ttl = _parse_ttl(raw_ttl)
+        if raw_ttl is not None and ttl is None:
+            await manager.send_to(user_id, {"type": "error", "message": "ttl inválido: debe ser un entero entre 1 y 86400."})
+            return
         allow_read_receipt = data.get("allow_read_receipt", True)
         if not isinstance(allow_read_receipt, bool):
             allow_read_receipt = True
