@@ -84,7 +84,9 @@ async def _handle_message(
             return
 
         ttl = _parse_ttl(data.get("ttl"))
-        allow_read_receipt = bool(data.get("allow_read_receipt", True))
+        allow_read_receipt = data.get("allow_read_receipt", True)
+        if not isinstance(allow_read_receipt, bool):
+            allow_read_receipt = True
         expires_at = _expires_iso(ttl)
 
         msg = ChatMessage(
@@ -132,7 +134,9 @@ async def _handle_message(
             return
 
         ttl = _parse_ttl(data.get("ttl"))
-        allow_read_receipt = bool(data.get("allow_read_receipt", True))
+        allow_read_receipt = data.get("allow_read_receipt", True)
+        if not isinstance(allow_read_receipt, bool):
+            allow_read_receipt = True
         expires_at = _expires_iso(ttl)
 
         msg = ChatMessage(
