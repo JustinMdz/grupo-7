@@ -6,6 +6,10 @@ class Settings(BaseSettings):
     allowed_origins: str = "*"
     max_group_messages: int = 100
     max_dm_messages: int = 50
+    #Agregamos las configuraciones para JWT
+    jwt_secret: str
+    jwt_algorithm: str = "HS256"
+    jwt_exp_seconds: int = 3600
 
     class Config:
         env_file = ".env"

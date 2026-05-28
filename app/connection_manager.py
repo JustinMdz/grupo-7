@@ -1,8 +1,6 @@
-
-
 import base64
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import WebSocket
@@ -10,6 +8,11 @@ from fastapi import WebSocket
 from .config import settings
 from .models import ChatMessage, ChatUser
 
+#Imports para JWT
+import jwt
+from jwt import ExpiredSignatureError, InvalidTokenError
+from datetime import datetime, timedelta
+from uuid import uuid4
 
 class ConnectionManager:
     def __init__(self) -> None:
@@ -29,18 +32,54 @@ class ConnectionManager:
         # Historial de DMs: frozenset({uid_a, uid_b}) → lista de mensajes
         self.dm_history: dict[frozenset, list[ChatMessage]] = {}
 
+        # Tokens revocados: jti → exp (timestamp Unix)
+        self.revoked_tokens: dict[str, int] = {}
+
     # ── Tokens ───────────────────────────────────────────────────────────────
 
     def create_token(self, user_id: str) -> str:
-        """Codifica user_id en base64 para usarlo como token de sesión."""
-        return base64.urlsafe_b64encode(user_id.encode()).decode()
+        now = datetime.utcnow()
+        exp = now + timedelta(seconds=settings.jwt_exp_seconds)
+        payload = {"sub": user_id, "iat": now, "exp": exp, "jti": str(uuid4())}
+        return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+    def _cleanup_revoked_tokens(self) -> None:
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        self.revoked_tokens = {
+            jti: exp for jti, exp in self.revoked_tokens.items() if exp > now_ts
+        }
 
     def decode_token(self, token: str) -> Optional[str]:
-        """Decodifica el token. Devuelve None si es inválido."""
-        try:
-            return base64.urlsafe_b64decode(token.encode()).decode()
-        except Exception:
+        try:    
+            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+            jti = payload.get("jti")
+            if not jti:
+                return None
+
+            self._cleanup_revoked_tokens()
+            if str(jti) in self.revoked_tokens:
+                return None
+
+            return payload.get("sub")
+        except ExpiredSignatureError:
             return None
+        except InvalidTokenError:
+            return None
+
+    def revoke_token(self, token: str) -> bool:
+        try:
+            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        except InvalidTokenError:
+            return False
+
+        jti = payload.get("jti")
+        exp = payload.get("exp")
+        if not jti or not exp:
+            return False
+
+        self.revoked_tokens[str(jti)] = int(exp)
+        self._cleanup_revoked_tokens()
+        return True
 
     # ── Registro ─────────────────────────────────────────────────────────────
 

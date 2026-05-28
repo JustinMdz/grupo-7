@@ -2,6 +2,7 @@
 Rutas HTTP del chat.
 
 POST /api/chat/join          — Registrar un nickname y obtener token
+POST /api/chat/logout        — Revocar el token actual
 GET  /api/chat/users         — Usuarios conectados ahora
 GET  /api/chat/messages      — Historial del chat grupal
 GET  /api/chat/messages/dm/{other_id} — Historial de DMs entre dos usuarios
@@ -47,6 +48,33 @@ def join_chat(body: JoinRequest, request: Request) -> dict:
     return {"user": user, "token": token}
 
 
+@router.post("/api/chat/logout")
+def logout(request: Request) -> dict:
+    manager = get_manager(request)
+
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "code": "MISSING_OR_INVALID_AUTH",
+                "message": "Debes enviar Authorization: Bearer <token>.",
+            },
+        )
+
+    token = auth.split(" ", 1)[1]
+    if not manager.revoke_token(token):
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "code": "INVALID_TOKEN",
+                "message": "Token inválido o ya expirado.",
+            },
+        )
+
+    return {"status": "ok", "message": "Sesión cerrada."}
+
+
 @router.get("/api/chat/users", response_model=list[ChatUser])
 def get_online_users(request: Request) -> list:
     manager = get_manager(request)
@@ -62,15 +90,21 @@ def get_group_messages(request: Request, limit: int = 50) -> list:
 
 @router.get("/api/chat/messages/dm/{other_id}", response_model=list[ChatMessage])
 def get_dm_history(other_id: str, request: Request) -> list:
-   
-    token = request.headers.get("X-User-Token")
-    if not token:
-        raise HTTPException(
-            status_code=401,
-            detail={"code": "MISSING_TOKEN", "message": "Falta el header X-User-Token."},
-        )
 
     manager = get_manager(request)
+    
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(
+        status_code=401,
+        detail={
+            "code": "MISSING_OR_INVALID_AUTH",
+            "message": "Debes enviar Authorization: Bearer <token>.",
+            },
+        )
+
+    token = auth.split(" ", 1)[1]
+    
     current_user_id = manager.decode_token(token)
 
     if not current_user_id or not manager.get_user(current_user_id):
