@@ -5,6 +5,7 @@ from .config import settings
 from .connection_manager import ConnectionManager
 from .routes.chat import router as chat_router
 from .routes.websocket import router as ws_router
+from .routes.firebase import router as firebase_router
 
 # Singleton global del manager — todos los routers lo comparten
 manager = ConnectionManager()
@@ -37,5 +38,7 @@ def create_app() -> FastAPI:
 
     app.include_router(chat_router)
     app.include_router(ws_router)
+
+    app.include_router(firebase_router)
 
     return app

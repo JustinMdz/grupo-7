@@ -9,6 +9,7 @@ class ChatUser(BaseModel):
     nickname: str
     joined_at: str       # ISO 8601
     is_online: bool
+    public_key: str | None = None  # Para encriptación futura (Grupo 4)
 
 
 class ChatMessage(BaseModel):
@@ -34,6 +35,14 @@ class JoinRequest(BaseModel):
 class JoinResponse(BaseModel):
     user: ChatUser
     token: str
+
+
+class CreateMessageRequest(BaseModel):
+    type: Literal["group", "dm"]
+    content: str
+    recipient_id: Optional[str] = None
+    ttl: Optional[int] = None
+    allow_read_receipt: bool = True
 
 
 # ── Payloads WebSocket (cliente → servidor) ───────────────────────────────────

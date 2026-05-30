@@ -1,3 +1,4 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
 
 
@@ -10,6 +11,20 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_exp_seconds: int = 3600
+    
+    # Configuracion firebase
+    firebase_enabled: bool = False
+    firebase_credentials_path: str | None = Field(
+        default="serviceAccountKey.json",
+        validation_alias=AliasChoices(
+            "FIREBASE_CREDENTIALS_PATH",
+            "FIREBASE_SERVICE_ACCOUNT_PATH",
+            "SERVICE_ACCOUNT_KEY_PATH",
+            "GOOGLE_APPLICATION_CREDENTIALS",
+        ),
+    )
+    firebase_project_id: str | None = None
+    firebase_messages_collection: str = "chat_messages"
 
     class Config:
         env_file = ".env"
