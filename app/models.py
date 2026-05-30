@@ -37,14 +37,6 @@ class JoinResponse(BaseModel):
     token: str
 
 
-class CreateMessageRequest(BaseModel):
-    type: Literal["group", "dm"]
-    content: str
-    recipient_id: Optional[str] = None
-    ttl: Optional[int] = None
-    allow_read_receipt: bool = True
-
-
 # ── Payloads WebSocket (cliente → servidor) ───────────────────────────────────
 
 class WsGroupMessage(BaseModel):
