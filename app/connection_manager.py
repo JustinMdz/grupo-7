@@ -1,11 +1,7 @@
-<<<<<<< Updated upstream
 
 
 import asyncio
 import base64
-=======
-import asyncio
->>>>>>> Stashed changes
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -14,16 +10,12 @@ from fastapi import WebSocket
 
 from .config import settings
 from .models import ChatMessage, ChatUser
-from .services.chat_history_service import ChatHistoryStore, InMemoryChatHistoryStore
 
-<<<<<<< Updated upstream
-=======
-# Imports para JWT
+#Imports para JWT
 import jwt
 from jwt import ExpiredSignatureError, InvalidTokenError
+from datetime import datetime, timedelta
 from uuid import uuid4
->>>>>>> Stashed changes
-
 
 class ConnectionManager:
     def __init__(self) -> None:
@@ -37,23 +29,12 @@ class ConnectionManager:
         # (se limpian al reiniciar el servidor)
         self.registered_users: dict[str, ChatUser] = {}
 
-        # Historial persistente (memoria/Firebase)
-        self.history_store: ChatHistoryStore = InMemoryChatHistoryStore()
+        # Historial del chat grupal (últimos MAX_GROUP_MESSAGES mensajes)
+        self.group_messages: list[ChatMessage] = []
 
-<<<<<<< Updated upstream
-    # ── Tokens ───────────────────────────────────────────────────────────────
+        # Historial de DMs: frozenset({uid_a, uid_b}) → lista de mensajes
+        self.dm_history: dict[frozenset, list[ChatMessage]] = {}
 
-    def create_token(self, user_id: str) -> str:
-        """Codifica user_id en base64 para usarlo como token de sesión."""
-        return base64.urlsafe_b64encode(user_id.encode()).decode()
-
-    def decode_token(self, token: str) -> Optional[str]:
-        """Decodifica el token. Devuelve None si es inválido."""
-        try:
-            return base64.urlsafe_b64decode(token.encode()).decode()
-        except Exception:
-            return None
-=======
         # Tokens revocados: jti → exp (timestamp Unix)
         self.revoked_tokens: dict[str, int] = {}
         # Vistos: message_id → lista de {"user_id": ..., "seen_at": ...}
@@ -62,18 +43,13 @@ class ConnectionManager:
         # Tareas de expiración pendientes: message_id → asyncio.Task
         self._expiry_tasks: dict[str, asyncio.Task] = {}
 
-    def set_history_store(self, store: ChatHistoryStore) -> None:
-        self.history_store = store
-
     # ── Tokens ───────────────────────────────────────────────────────────────
 
     def create_token(self, user_id: str) -> str:
         now = datetime.utcnow()
         exp = now + timedelta(seconds=settings.jwt_exp_seconds)
         payload = {"sub": user_id, "iat": now, "exp": exp, "jti": str(uuid4())}
-        return jwt.encode(
-            payload, settings.jwt_secret, algorithm=settings.jwt_algorithm
-        )
+        return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
     def _cleanup_revoked_tokens(self) -> None:
         now_ts = int(datetime.now(timezone.utc).timestamp())
@@ -82,10 +58,8 @@ class ConnectionManager:
         }
 
     def decode_token(self, token: str) -> Optional[str]:
-        try:
-            payload = jwt.decode(
-                token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
-            )
+        try:    
+            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
             jti = payload.get("jti")
             if not jti:
                 return None
@@ -102,9 +76,7 @@ class ConnectionManager:
 
     def revoke_token(self, token: str) -> bool:
         try:
-            payload = jwt.decode(
-                token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
-            )
+            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         except InvalidTokenError:
             return False
 
@@ -116,12 +88,11 @@ class ConnectionManager:
         self.revoked_tokens[str(jti)] = int(exp)
         self._cleanup_revoked_tokens()
         return True
->>>>>>> Stashed changes
 
     # ── Registro ─────────────────────────────────────────────────────────────
 
     def register_user(self, nickname: str) -> tuple[ChatUser, str]:
-
+    
         normalized = nickname.strip()
 
         # Retornar usuario existente si el nickname ya está registrado
@@ -147,7 +118,7 @@ class ConnectionManager:
     # ── Ciclo de vida WebSocket ───────────────────────────────────────────────
 
     async def connect(self, websocket: WebSocket, user_id: str) -> bool:
-
+        
         user = self.registered_users.get(user_id)
         if not user:
             return False
@@ -159,7 +130,7 @@ class ConnectionManager:
         return True
 
     async def disconnect(self, user_id: str) -> None:
-
+       
         self.active_connections.pop(user_id, None)
         user = self.active_users.pop(user_id, None)
         if user:
@@ -168,7 +139,7 @@ class ConnectionManager:
     # ── Envío de mensajes ─────────────────────────────────────────────────────
 
     async def broadcast(self, message: dict, exclude_id: Optional[str] = None) -> None:
-
+       
         for uid, ws in list(self.active_connections.items()):
             if uid != exclude_id:
                 try:
@@ -179,7 +150,7 @@ class ConnectionManager:
                     pass
 
     async def send_to(self, user_id: str, message: dict) -> None:
-
+       
         ws = self.active_connections.get(user_id)
         if ws:
             try:
@@ -190,18 +161,28 @@ class ConnectionManager:
     # ── Historial ─────────────────────────────────────────────────────────────
 
     def save_group_message(self, msg: ChatMessage) -> None:
-        self.history_store.save_group_message(msg)
+        self.group_messages.append(msg)
+        # Mantener solo los últimos N mensajes
+        if len(self.group_messages) > settings.max_group_messages:
+            self.group_messages = self.group_messages[-settings.max_group_messages:]
 
     def save_dm_message(self, msg: ChatMessage) -> None:
-        self.history_store.save_dm_message(msg)
+        if not msg.recipient_id:
+            return
+        key = frozenset({msg.sender_id, msg.recipient_id})
+        history = self.dm_history.setdefault(key, [])
+        history.append(msg)
+        if len(history) > settings.max_dm_messages:
+            self.dm_history[key] = history[-settings.max_dm_messages:]
 
     def get_group_messages(self, limit: int = 50) -> list[ChatMessage]:
-        return self.history_store.get_group_messages(limit)
+        return self.group_messages[-limit:]
 
     def get_dm_history(
         self, user_a: str, user_b: str, limit: int = 50
     ) -> list[ChatMessage]:
-        return self.history_store.get_dm_history(user_a, user_b, limit)
+        key = frozenset({user_a, user_b})
+        return self.dm_history.get(key, [])[-limit:]
 
     # ── Consultas ─────────────────────────────────────────────────────────────
 
@@ -210,13 +191,18 @@ class ConnectionManager:
 
     def get_user(self, user_id: str) -> Optional[ChatUser]:
         return self.registered_users.get(user_id)
-<<<<<<< Updated upstream
-=======
 
     # ── Vistos (read receipts) ────────────────────────────────────────────────
 
     def get_message_by_id(self, message_id: str) -> Optional[ChatMessage]:
-        return self.history_store.get_message_by_id(message_id)
+        for msg in self.group_messages:
+            if msg.id == message_id:
+                return msg
+        for history in self.dm_history.values():
+            for msg in history:
+                if msg.id == message_id:
+                    return msg
+        return None
 
     def record_read(self, message_id: str, reader_id: str) -> Optional[dict]:
         """
@@ -247,21 +233,18 @@ class ConnectionManager:
         self._expiry_tasks[msg.id] = task
 
     async def _expire_message(self, msg: ChatMessage) -> None:
-        if msg.ttl is None:
-            return
-
-        ttl_seconds = float(msg.ttl)
-        await asyncio.sleep(ttl_seconds)
+        await asyncio.sleep(msg.ttl)
         expired_payload = {"type": "message_expired", "message_id": msg.id}
 
-        self.history_store.delete_message(msg)
-
         if msg.type == "group":
+            self.group_messages = [m for m in self.group_messages if m.id != msg.id]
             await self.broadcast(expired_payload)
         elif msg.type == "dm" and msg.recipient_id:
+            key = frozenset({msg.sender_id, msg.recipient_id})
+            if key in self.dm_history:
+                self.dm_history[key] = [m for m in self.dm_history[key] if m.id != msg.id]
             await self.send_to(msg.sender_id, expired_payload)
             await self.send_to(msg.recipient_id, expired_payload)
 
         self.read_receipts.pop(msg.id, None)
         self._expiry_tasks.pop(msg.id, None)
->>>>>>> Stashed changes
