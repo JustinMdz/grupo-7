@@ -17,10 +17,8 @@ from jwt import ExpiredSignatureError, InvalidTokenError
 from datetime import datetime, timedelta
 from uuid import uuid4
 
-from .services.chat_history_service import ChatHistoryStore
-
 class ConnectionManager:
-    def __init__(self, history_store: ChatHistoryStore | None = None) -> None:
+    def __init__(self) -> None:
         # WebSockets activos: user_id → WebSocket
         self.active_connections: dict[str, WebSocket] = {}
 
@@ -44,9 +42,6 @@ class ConnectionManager:
 
         # Tareas de expiración pendientes: message_id → asyncio.Task
         self._expiry_tasks: dict[str, asyncio.Task] = {}
-
-        # Persistencia compartida: memoria, Firebase o composición de ambas.
-        self.history_store = history_store
 
     # ── Tokens ───────────────────────────────────────────────────────────────
 
@@ -166,20 +161,12 @@ class ConnectionManager:
     # ── Historial ─────────────────────────────────────────────────────────────
 
     def save_group_message(self, msg: ChatMessage) -> None:
-        if self.history_store is not None:
-            self.history_store.save_group_message(msg)
-            return
-
         self.group_messages.append(msg)
         # Mantener solo los últimos N mensajes
         if len(self.group_messages) > settings.max_group_messages:
             self.group_messages = self.group_messages[-settings.max_group_messages:]
 
     def save_dm_message(self, msg: ChatMessage) -> None:
-        if self.history_store is not None:
-            self.history_store.save_dm_message(msg)
-            return
-
         if not msg.recipient_id:
             return
         key = frozenset({msg.sender_id, msg.recipient_id})
@@ -189,17 +176,11 @@ class ConnectionManager:
             self.dm_history[key] = history[-settings.max_dm_messages:]
 
     def get_group_messages(self, limit: int = 50) -> list[ChatMessage]:
-        if self.history_store is not None:
-            return self.history_store.get_group_messages(limit)
-
         return self.group_messages[-limit:]
 
     def get_dm_history(
         self, user_a: str, user_b: str, limit: int = 50
     ) -> list[ChatMessage]:
-        if self.history_store is not None:
-            return self.history_store.get_dm_history(user_a, user_b, limit)
-
         key = frozenset({user_a, user_b})
         return self.dm_history.get(key, [])[-limit:]
 
@@ -214,9 +195,6 @@ class ConnectionManager:
     # ── Vistos (read receipts) ────────────────────────────────────────────────
 
     def get_message_by_id(self, message_id: str) -> Optional[ChatMessage]:
-        if self.history_store is not None:
-            return self.history_store.get_message_by_id(message_id)
-
         for msg in self.group_messages:
             if msg.id == message_id:
                 return msg
@@ -270,17 +248,3 @@ class ConnectionManager:
 
         self.read_receipts.pop(msg.id, None)
         self._expiry_tasks.pop(msg.id, None)
-
-    def delete_message(self, msg: ChatMessage) -> None:
-        if self.history_store is not None:
-            self.history_store.delete_message(msg)
-            return
-
-        if msg.type == "group":
-            self.group_messages = [m for m in self.group_messages if m.id != msg.id]
-            return
-
-        if msg.recipient_id:
-            key = frozenset({msg.sender_id, msg.recipient_id})
-            if key in self.dm_history:
-                self.dm_history[key] = [m for m in self.dm_history[key] if m.id != msg.id]
