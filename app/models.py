@@ -4,11 +4,11 @@ from pydantic import BaseModel
 
 
 class ChatUser(BaseModel):
-
     id: str
     nickname: str
     joined_at: str  # ISO 8601
     is_online: bool
+    public_key: Optional[str] = None
 
 
 class ChatMessage(BaseModel):
@@ -19,16 +19,11 @@ class ChatMessage(BaseModel):
     sender_nickname: str
     content: str
     type: Literal["group", "dm"]
-<<<<<<< Updated upstream
-    recipient_id: Optional[str] = None   # Solo presente en DMs
-    timestamp: str                        # ISO 8601
-=======
     recipient_id: Optional[str] = None  # Solo presente en DMs
     timestamp: str  # ISO 8601
-    ttl: Optional[int] = None  # Segundos hasta expirar (None = permanente)
-    expires_at: Optional[str] = None  # ISO 8601 — calculado al crear el mensaje
-    allow_read_receipt: bool = True  # Si False, no se notifica al remitente cuando leen
->>>>>>> Stashed changes
+    ttl: Optional[int] = None
+    expires_at: Optional[str] = None
+    allow_read_receipt: bool = True
 
 
 # ── Payloads HTTP ────────────────────────────────────────────────────────────
@@ -51,6 +46,10 @@ class CreateMessageRequest(BaseModel):
     allow_read_receipt: bool = True
 
 
+class PublicKeyRequest(BaseModel):
+    public_key: str
+
+
 # ── Payloads WebSocket (cliente → servidor) ───────────────────────────────────
 
 
@@ -65,16 +64,13 @@ class WsDMMessage(BaseModel):
     type: Literal["dm"]
     to: str  # user_id del destinatario
     content: str
-<<<<<<< Updated upstream
-=======
     ttl: Optional[int] = None
     allow_read_receipt: bool = True
 
 
 class WsMarkRead(BaseModel):
     type: Literal["mark_read"]
-    message_id: str  # ID del mensaje que el usuario leyó
->>>>>>> Stashed changes
+    message_id: str
 
 
 class WsPing(BaseModel):

@@ -7,8 +7,6 @@ class Settings(BaseSettings):
     allowed_origins: str = "*"
     max_group_messages: int = 100
     max_dm_messages: int = 50
-<<<<<<< Updated upstream
-=======
     firebase_enabled: bool = False
     firebase_credentials_path: str | None = Field(
         default="serviceAccountKey.json",
@@ -21,11 +19,10 @@ class Settings(BaseSettings):
     )
     firebase_project_id: str | None = None
     firebase_messages_collection: str = "chat_messages"
-    # Agregamos las configuraciones para JWT
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_exp_seconds: int = 3600
->>>>>>> Stashed changes
+    group_encryption_key: str = ""
 
     class Config:
         env_file = ".env"
