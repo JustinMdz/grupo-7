@@ -9,7 +9,6 @@ class ChatUser(BaseModel):
     nickname: str
     joined_at: str       # ISO 8601
     is_online: bool
-    public_key: str | None = None  # Para encriptación futura (Grupo 4)
 
 
 class ChatMessage(BaseModel):
