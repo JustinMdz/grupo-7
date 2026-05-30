@@ -14,24 +14,17 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Request
 
 from ..config import settings
-from ..models import ChatMessage, ChatUser, CreateMessageRequest
-from ..services.chat_history_service import build_chat_history_store
+from ..models import ChatMessage, CreateMessageRequest
 
 router = APIRouter(prefix="/api/firebase", tags=["firebase"])
-
-# Singleton del store de persistencia (Grupo 2)
-_history_store = None
-
-
-def get_history_store():
-    global _history_store
-    if _history_store is None:
-        _history_store = build_chat_history_store()
-    return _history_store
 
 
 def get_manager(request: Request):
     return request.app.state.manager
+
+
+def get_history_store(request: Request):
+    return request.app.state.history_store
 
 
 def _current_user_id(request: Request) -> str:
@@ -90,7 +83,7 @@ def create_message(body: CreateMessageRequest, request: Request) -> ChatMessage:
     manager = get_manager(request)
     current_user_id = _current_user_id(request)
     current_user = manager.get_user(current_user_id)
-    history_store = get_history_store()
+    history_store = get_history_store(request)
 
     # Validar contenido
     content = body.content.strip()
@@ -185,7 +178,7 @@ def get_group_messages(request: Request, limit: int = 50) -> list[ChatMessage]:
         )
 
     limit = min(limit, 100)
-    history_store = get_history_store()
+    history_store = get_history_store(request)
     return history_store.get_group_messages(limit)
 
 
@@ -211,6 +204,6 @@ def get_dm_history(
     manager = get_manager(request)
     current_user_id = _current_user_id(request)
     limit = min(limit, 100)
-    history_store = get_history_store()
+    history_store = get_history_store(request)
 
     return history_store.get_dm_history(current_user_id, other_id, limit)
