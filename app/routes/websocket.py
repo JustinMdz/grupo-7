@@ -35,7 +35,9 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState
 
 from ..connection_manager import ConnectionManager
-from ..models import ChatMessage
+from ..models import ChatMessage, MediaAttachment
+
+from pydantic import ValidationError
 
 router = APIRouter()
 
@@ -63,6 +65,18 @@ def _expires_iso(ttl: int | None) -> str | None:
     return (datetime.now(timezone.utc) + timedelta(seconds=ttl)).isoformat()
 
 
+def _parse_media(value) -> MediaAttachment | None:
+    """Valida el payload de media"""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("media debe ser un objeto.")
+    try:
+        return MediaAttachment(**value)
+    except ValidationError as e:
+        raise ValueError(f"media inválido: {e.errors()[0]['msg']}")
+
+
 async def _handle_message(
     manager: ConnectionManager,
     user_id: str,
@@ -75,7 +89,13 @@ async def _handle_message(
     # ── Mensaje al chat grupal ────────────────────────────────────────────────
     if msg_type == "group_message":
         content = str(data.get("content", "")).strip()
-        if not content:
+        try:
+            media = _parse_media(data.get("media"))
+        except ValueError as e:
+            await manager.send_to(user_id, {"type": "error", "message": str(e)})
+            return
+        
+        if not content and media is None:
             await manager.send_to(user_id, {"type": "error", "message": "El mensaje no puede estar vacío."})
             return
 
@@ -106,6 +126,7 @@ async def _handle_message(
             ttl=ttl,
             expires_at=expires_at,
             allow_read_receipt=allow_read_receipt,
+            media=media,
         )
         manager.save_group_message(msg)
         await manager.broadcast({
@@ -118,6 +139,12 @@ async def _handle_message(
     elif msg_type == "dm":
         to_id = str(data.get("to", "")).strip()
         content = str(data.get("content", "")).strip()
+        
+        try:
+            media = _parse_media(data.get("media"))
+        except ValueError as e:
+            await manager.send_to(user_id, {"type": "error", "message": str(e)})
+            return
 
         if not to_id:
             await manager.send_to(user_id, {"type": "error", "message": "Debes especificar el destinatario ('to')."})
@@ -131,7 +158,7 @@ async def _handle_message(
             await manager.send_to(user_id, {"type": "error", "message": "El destinatario no existe."})
             return
 
-        if not content:
+        if not content and media is None:
             await manager.send_to(user_id, {"type": "error", "message": "El mensaje no puede estar vacío."})
             return
 
@@ -162,6 +189,7 @@ async def _handle_message(
             ttl=ttl,
             expires_at=expires_at,
             allow_read_receipt=allow_read_receipt,
+            media=media,
         )
         manager.save_dm_message(msg)
 

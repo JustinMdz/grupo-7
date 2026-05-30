@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_exp_seconds: int = 3600
+    # Cloudinary (Gestión Multimedia)
+    cloudinary_cloud_name: str = ""
+    cloudinary_api_key: str = ""
+    cloudinary_api_secret: str = ""
+    max_upload_size_mb: int = 10
 
     class Config:
         env_file = ".env"
