@@ -5,7 +5,8 @@ from .config import settings
 from .connection_manager import ConnectionManager
 from .routes.chat import router as chat_router
 from .routes.websocket import router as ws_router
-from .services.chat_history_service import build_chat_history_store
+from .routes.media import router as media_router
+from .services import cloudinary_service
 
 # Singleton global del manager — todos los routers lo comparten
 manager = ConnectionManager()
@@ -32,15 +33,15 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    
+    # Inicializar Cloudinary
+    cloudinary_service.init_cloudinary()
 
     # Inyectar el manager en el estado de la app para que los routers lo accedan
-    chat_history_store = build_chat_history_store()
-    manager.set_history_store(chat_history_store)
-
     app.state.manager = manager
-    app.state.chat_history_store = chat_history_store
 
     app.include_router(chat_router)
+    app.include_router(media_router)
     app.include_router(ws_router)
 
     return app

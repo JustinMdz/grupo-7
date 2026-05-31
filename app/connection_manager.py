@@ -7,7 +7,7 @@ from fastapi import WebSocket
 
 from .config import settings
 from .models import ChatMessage, ChatUser
-from .services.chat_history_service import ChatHistoryStore, InMemoryChatHistoryStore
+from .services import cloudinary_service
 
 import jwt
 from jwt import ExpiredSignatureError, InvalidTokenError
@@ -19,13 +19,11 @@ class ConnectionManager:
         self.active_connections: dict[str, WebSocket] = {}
         self.active_users: dict[str, ChatUser] = {}
         self.registered_users: dict[str, ChatUser] = {}
-        self.history_store: ChatHistoryStore = InMemoryChatHistoryStore()
+        self.group_messages: list[ChatMessage] = []
+        self.dm_history: dict[frozenset, list[ChatMessage]] = {}
         self.revoked_tokens: dict[str, int] = {}
         self.read_receipts: dict[str, list[dict]] = {}
         self._expiry_tasks: dict[str, asyncio.Task] = {}
-
-    def set_history_store(self, store: ChatHistoryStore) -> None:
-        self.history_store = store
 
     # ── Tokens ───────────────────────────────────────────────────────────────
 
@@ -43,9 +41,7 @@ class ConnectionManager:
 
     def decode_token(self, token: str) -> Optional[str]:
         try:
-            payload = jwt.decode(
-                token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
-            )
+            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
             jti = payload.get("jti")
             if not jti:
                 return None
@@ -60,9 +56,7 @@ class ConnectionManager:
 
     def revoke_token(self, token: str) -> bool:
         try:
-            payload = jwt.decode(
-                token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
-            )
+            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         except InvalidTokenError:
             return False
         jti = payload.get("jti")
@@ -126,16 +120,25 @@ class ConnectionManager:
     # ── Historial ─────────────────────────────────────────────────────────────
 
     def save_group_message(self, msg: ChatMessage) -> None:
-        self.history_store.save_group_message(msg)
+        self.group_messages.append(msg)
+        if len(self.group_messages) > settings.max_group_messages:
+            self.group_messages = self.group_messages[-settings.max_group_messages:]
 
     def save_dm_message(self, msg: ChatMessage) -> None:
-        self.history_store.save_dm_message(msg)
+        if not msg.recipient_id:
+            return
+        key = frozenset({msg.sender_id, msg.recipient_id})
+        history = self.dm_history.setdefault(key, [])
+        history.append(msg)
+        if len(history) > settings.max_dm_messages:
+            self.dm_history[key] = history[-settings.max_dm_messages:]
 
     def get_group_messages(self, limit: int = 50) -> list[ChatMessage]:
-        return self.history_store.get_group_messages(limit)
+        return self.group_messages[-limit:]
 
     def get_dm_history(self, user_a: str, user_b: str, limit: int = 50) -> list[ChatMessage]:
-        return self.history_store.get_dm_history(user_a, user_b, limit)
+        key = frozenset({user_a, user_b})
+        return self.dm_history.get(key, [])[-limit:]
 
     # ── Consultas ─────────────────────────────────────────────────────────────
 
@@ -155,7 +158,14 @@ class ConnectionManager:
     # ── Vistos (read receipts) ────────────────────────────────────────────────
 
     def get_message_by_id(self, message_id: str) -> Optional[ChatMessage]:
-        return self.history_store.get_message_by_id(message_id)
+        for msg in self.group_messages:
+            if msg.id == message_id:
+                return msg
+        for history in self.dm_history.values():
+            for msg in history:
+                if msg.id == message_id:
+                    return msg
+        return None
 
     def record_read(self, message_id: str, reader_id: str) -> Optional[dict]:
         msg = self.get_message_by_id(message_id)
@@ -179,14 +189,23 @@ class ConnectionManager:
         self._expiry_tasks[msg.id] = task
 
     async def _expire_message(self, msg: ChatMessage) -> None:
-        if msg.ttl is None:
-            return
-        await asyncio.sleep(float(msg.ttl))
+        await asyncio.sleep(msg.ttl)
+        if msg.media is not None:
+            try:
+                cloudinary_service.delete_file(
+                    public_id=msg.media.public_id,
+                    resource_type=msg.media.resource_type,
+                )
+            except Exception:
+                pass
         expired_payload = {"type": "message_expired", "message_id": msg.id}
-        self.history_store.delete_message(msg)
         if msg.type == "group":
+            self.group_messages = [m for m in self.group_messages if m.id != msg.id]
             await self.broadcast(expired_payload)
         elif msg.type == "dm" and msg.recipient_id:
+            key = frozenset({msg.sender_id, msg.recipient_id})
+            if key in self.dm_history:
+                self.dm_history[key] = [m for m in self.dm_history[key] if m.id != msg.id]
             await self.send_to(msg.sender_id, expired_payload)
             await self.send_to(msg.recipient_id, expired_payload)
         self.read_receipts.pop(msg.id, None)
