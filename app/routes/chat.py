@@ -112,8 +112,8 @@ def create_message(body: CreateMessageRequest, request: Request) -> ChatMessage:
     content = body.content.strip()
     if not content:
         raise HTTPException(status_code=400, detail={"code": "EMPTY_CONTENT", "message": "El mensaje no puede estar vacío."})
-    if len(content) > 2000:
-        raise HTTPException(status_code=400, detail={"code": "MESSAGE_TOO_LONG", "message": "El mensaje es demasiado largo (máx 2000 caracteres)."})
+    if len(content) > 1000:
+        raise HTTPException(status_code=400, detail={"code": "MESSAGE_TOO_LONG", "message": "El mensaje es demasiado largo (máx 1000 caracteres)."})
 
     ttl = _parse_ttl(body.ttl)
     expires_at = None

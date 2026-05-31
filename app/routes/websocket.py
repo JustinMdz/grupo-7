@@ -81,8 +81,8 @@ async def _handle_message(
             await manager.send_to(user_id, {"type": "error", "message": "El mensaje no puede estar vacío."})
             return
 
-        if len(content) > 2000:
-            await manager.send_to(user_id, {"type": "error", "message": "El mensaje es demasiado largo (máx 2000 caracteres)."})
+        if len(content) > 1000:
+            await manager.send_to(user_id, {"type": "error", "message": "El mensaje es demasiado largo (máx 1000 caracteres)."})
             return
 
         raw_ttl = data.get("ttl")
@@ -137,8 +137,8 @@ async def _handle_message(
             await manager.send_to(user_id, {"type": "error", "message": "El mensaje no puede estar vacío."})
             return
 
-        if len(content) > 2000:
-            await manager.send_to(user_id, {"type": "error", "message": "El mensaje es demasiado largo (máx 2000 caracteres)."})
+        if len(content) > 1000:
+            await manager.send_to(user_id, {"type": "error", "message": "El mensaje es demasiado largo (máx 1000 caracteres)."})
             return
 
         raw_ttl = data.get("ttl")
