@@ -11,6 +11,19 @@ class ChatUser(BaseModel):
     is_online: bool
 
 
+class MediaAttachment(BaseModel):
+    """Archivo subido a Cloudinary y adjunto a un mensaje."""
+    url: str
+    public_id: str
+    resource_type: Literal["image", "video", "raw"]
+    format: str
+    size_bytes: int
+    original_filename: str
+    width: Optional[int] = None
+    height: Optional[int] = None
+    duration: Optional[float] = None
+
+
 class ChatMessage(BaseModel):
     """Mensaje del chat — grupal o DM."""
     id: str
@@ -23,6 +36,7 @@ class ChatMessage(BaseModel):
     ttl: Optional[int] = None            # Segundos hasta expirar (None = permanente)
     expires_at: Optional[str] = None     # ISO 8601 — calculado al crear el mensaje
     allow_read_receipt: bool = True      # Si False, no se notifica al remitente cuando leen
+    media: Optional[MediaAttachment] = None
 
 
 # ── Payloads HTTP ────────────────────────────────────────────────────────────
@@ -43,6 +57,7 @@ class WsGroupMessage(BaseModel):
     content: str
     ttl: Optional[int] = None
     allow_read_receipt: bool = True
+    media: Optional[MediaAttachment] = None
 
 
 class WsDMMessage(BaseModel):
@@ -51,6 +66,7 @@ class WsDMMessage(BaseModel):
     content: str
     ttl: Optional[int] = None
     allow_read_receipt: bool = True
+    media: Optional[MediaAttachment] = None
 
 
 class WsMarkRead(BaseModel):

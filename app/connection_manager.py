@@ -16,6 +16,7 @@ import jwt
 from jwt import ExpiredSignatureError, InvalidTokenError
 from datetime import datetime, timedelta
 from uuid import uuid4
+from .services import cloudinary_service
 
 class ConnectionManager:
     def __init__(self) -> None:
@@ -234,6 +235,15 @@ class ConnectionManager:
 
     async def _expire_message(self, msg: ChatMessage) -> None:
         await asyncio.sleep(msg.ttl)
+        # si el mensaje tenía un archivo adjunto, lo borramos de Cloudinary
+        if msg.media is not None:
+            try:
+                cloudinary_service.delete_file(
+                    public_id=msg.media.public_id,
+                    resource_type=msg.media.resource_type,
+                )
+            except Exception:
+                pass
         expired_payload = {"type": "message_expired", "message_id": msg.id}
 
         if msg.type == "group":
