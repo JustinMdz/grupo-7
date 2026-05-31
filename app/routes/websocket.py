@@ -24,6 +24,7 @@ Servidor → Cliente:
   { "type": "user_left", "user_id": "..." }
   { "type": "users_list", "users": [ ...ChatUser ] }
   { "type": "group_history", "messages": [ ...ChatMessage ] }
+  { "type": "group_key", "key": "<base64_32_bytes>" }
   { "type": "pong" }
   { "type": "error", "message": "..." }
 """
@@ -35,6 +36,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState
 
 from ..connection_manager import ConnectionManager
+from ..config import settings
 from ..models import ChatMessage, MediaAttachment
 
 from pydantic import ValidationError
@@ -83,7 +85,7 @@ async def _handle_message(
     nickname: str,
     data: dict,
 ) -> None:
-    
+
     msg_type = data.get("type")
 
     # ── Mensaje al chat grupal ────────────────────────────────────────────────
@@ -193,7 +195,6 @@ async def _handle_message(
         )
         manager.save_dm_message(msg)
 
-        # Enviamos al destinatario y una copia al remitente (para que vea su propio mensaje)
         payload = {"type": "dm", "message": msg.model_dump()}
         await manager.send_to(to_id, payload)
         await manager.send_to(user_id, payload)
@@ -225,16 +226,14 @@ async def _handle_message(
 
 @router.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str) -> None:
- 
+
     manager: ConnectionManager = websocket.app.state.manager
 
-    # Validar token
     user_id = manager.decode_token(token)
     if not user_id or not manager.get_user(user_id):
         await websocket.close(code=4001, reason="Token inválido o usuario no registrado.")
         return
 
-    # Conectar
     connected = await manager.connect(websocket, user_id)
     if not connected:
         await websocket.close(code=4001, reason="No se pudo conectar.")
@@ -243,15 +242,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str) -> None:
     user = manager.active_users[user_id]
     nickname = user.nickname
 
-    # Notificar a todos los demás que este usuario entró
     await manager.broadcast(
         {"type": "user_joined", "user": user.model_dump()},
         exclude_id=user_id,
     )
 
-    # Enviar estado inicial SOLO al nuevo usuario:
-    # - Lista de usuarios online
-    # - Historial del chat grupal
     await manager.send_to(user_id, {
         "type": "users_list",
         "users": [u.model_dump() for u in manager.get_online_users()],
@@ -260,8 +255,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str) -> None:
         "type": "group_history",
         "messages": [m.model_dump() for m in manager.get_group_messages(50)],
     })
+    await manager.send_to(user_id, {
+        "type": "group_key",
+        "key": settings.group_encryption_key,
+    })
 
-    # Loop principal de recepción de mensajes
     try:
         while True:
             data = await websocket.receive_json()
@@ -271,7 +269,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str) -> None:
         pass
 
     except Exception:
-        # Cualquier error inesperado — cerramos limpiamente
         if websocket.client_state == WebSocketState.CONNECTED:
             await websocket.close(code=1011, reason="Error interno del servidor.")
 

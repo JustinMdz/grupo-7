@@ -4,11 +4,11 @@ from pydantic import BaseModel
 
 
 class ChatUser(BaseModel):
-    
     id: str
     nickname: str
     joined_at: str       # ISO 8601
     is_online: bool
+    public_key: Optional[str] = None
 
 
 class MediaAttachment(BaseModel):
@@ -31,11 +31,11 @@ class ChatMessage(BaseModel):
     sender_nickname: str
     content: str
     type: Literal["group", "dm"]
-    recipient_id: Optional[str] = None   # Solo presente en DMs
-    timestamp: str                        # ISO 8601
-    ttl: Optional[int] = None            # Segundos hasta expirar (None = permanente)
-    expires_at: Optional[str] = None     # ISO 8601 — calculado al crear el mensaje
-    allow_read_receipt: bool = True      # Si False, no se notifica al remitente cuando leen
+    recipient_id: Optional[str] = None
+    timestamp: str
+    ttl: Optional[int] = None
+    expires_at: Optional[str] = None
+    allow_read_receipt: bool = True
     media: Optional[MediaAttachment] = None
 
 
@@ -48,6 +48,18 @@ class JoinRequest(BaseModel):
 class JoinResponse(BaseModel):
     user: ChatUser
     token: str
+
+
+class CreateMessageRequest(BaseModel):
+    type: Literal["group", "dm"]
+    content: str
+    recipient_id: Optional[str] = None
+    ttl: Optional[int] = None
+    allow_read_receipt: bool = True
+
+
+class PublicKeyRequest(BaseModel):
+    public_key: str
 
 
 # ── Payloads WebSocket (cliente → servidor) ───────────────────────────────────
@@ -71,7 +83,7 @@ class WsDMMessage(BaseModel):
 
 class WsMarkRead(BaseModel):
     type: Literal["mark_read"]
-    message_id: str   # ID del mensaje que el usuario leyó
+    message_id: str
 
 
 class WsPing(BaseModel):
