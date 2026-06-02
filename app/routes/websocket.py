@@ -9,6 +9,9 @@ Cliente → Servidor:
   { "type": "group_message", "content": "...", "ttl": 30, "allow_read_receipt": true }
   { "type": "dm", "to": "<user_id>", "content": "...", "ttl": 60, "allow_read_receipt": false }
   { "type": "mark_read", "message_id": "<id>" }
+  { "type": "typing" }                         — grupo (broadcast)
+  { "type": "typing", "to": "<user_id>" }      — DM (solo al destinatario)
+  { "type": "stop_typing" }
   { "type": "ping" }
 
   Campos opcionales:
@@ -20,6 +23,8 @@ Servidor → Cliente:
   { "type": "dm", "message": { ...ChatMessage } }
   { "type": "message_seen", "message_id": "...", "seen_by": "<user_id>", "seen_at": "..." }
   { "type": "message_expired", "message_id": "..." }
+  { "type": "typing", "user_id": "...", "nickname": "..." }
+  { "type": "stop_typing", "user_id": "..." }
   { "type": "user_joined", "user": { ...ChatUser } }
   { "type": "user_left", "user_id": "..." }
   { "type": "users_list", "users": [ ...ChatUser ] }
@@ -38,6 +43,7 @@ from fastapi.websockets import WebSocketState
 from ..connection_manager import ConnectionManager
 from ..config import settings
 from ..models import ChatMessage, MediaAttachment
+from ..services.moderation_service import censor
 
 from pydantic import ValidationError
 
@@ -97,6 +103,8 @@ async def _handle_message(
             await manager.send_to(user_id, {"type": "error", "message": str(e)})
             return
         
+        content = censor(content)
+
         if not content and media is None:
             await manager.send_to(user_id, {"type": "error", "message": "El mensaje no puede estar vacío."})
             return
@@ -147,6 +155,8 @@ async def _handle_message(
         except ValueError as e:
             await manager.send_to(user_id, {"type": "error", "message": str(e)})
             return
+
+        content = censor(content)
 
         if not to_id:
             await manager.send_to(user_id, {"type": "error", "message": "Debes especificar el destinatario ('to')."})
@@ -215,6 +225,19 @@ async def _handle_message(
                 "seen_by": receipt["seen_by"],
                 "seen_at": receipt["seen_at"],
             })
+
+    # ── Escribiendo ───────────────────────────────────────────────────────────
+    elif msg_type == "typing":
+        to_id = data.get("to")
+        payload = {"type": "typing", "user_id": user_id, "nickname": nickname}
+        if to_id:
+            await manager.send_to(to_id, payload)
+        else:
+            await manager.broadcast(payload, exclude_id=user_id)
+
+    elif msg_type == "stop_typing":
+        payload = {"type": "stop_typing", "user_id": user_id}
+        await manager.broadcast(payload, exclude_id=user_id)
 
     # ── Ping ──────────────────────────────────────────────────────────────────
     elif msg_type == "ping":
