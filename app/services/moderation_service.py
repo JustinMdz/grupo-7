@@ -7,7 +7,6 @@ _palabrota = Palabrota(
         Country.COSTA_RICA,
         Country.MEXICO,
         Country.ARGENTINA,
-        Country.ESPAÑA,
         Country.COLOMBIA,
         Country.VENEZUELA,
         Country.CHILE,
